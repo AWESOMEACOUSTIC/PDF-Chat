@@ -106,8 +106,11 @@ export default function Home() {
           <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
             {features.map(({ name, description, icon: Icon }) => (
               <div key={name} className="relative flex flex-col gap-6 p-6 bg-white rounded-lg shadow-lg">
-                <div className="flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white">
-                  <Icon className="h-6 w-6" />
+                <div className="flex items-center justify-center h-12 w-12 rounded-md bg-indigo-600/68 text-white">
+                  <Icon
+                    aria-hidden="true"
+                    className="h-6 w-6"
+                  />
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900">{name}</h3>
