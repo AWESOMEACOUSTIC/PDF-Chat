@@ -1,3 +1,5 @@
+import Documents from "@/components/Documents";
+
 export const dynamic = "force-dynamic";
 
 export default function DashboardPage() { 
@@ -8,6 +10,7 @@ export default function DashboardPage() {
             </h1>
 
         {/* Document List */}
+        <Documents />
 
         </div>
     );
