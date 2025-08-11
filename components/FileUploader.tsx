@@ -1,4 +1,5 @@
 "use client"
+import useUpload from '@/useUpload'
 import { CircleArrowDown, RocketIcon } from 'lucide-react'
 import React, { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
@@ -6,13 +7,28 @@ import { useDropzone } from 'react-dropzone'
 
 
 const FileUploader = () => {
+    const {progress, status, fileId, handleUpload} = useUpload();  // to get the upload status
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
+    const onDrop = useCallback( async (acceptedFiles: File[]) => {
         // Do something with the files
-        console.log(acceptedFiles);
-    }, [])
 
-    const { getRootProps, getInputProps, isDragActive, isFocused } = useDropzone({ onDrop })
+        const file = acceptedFiles[0]; // Get the first accepted file
+        if(file){
+            await handleUpload(file);
+        }else{
+            // do nothing..
+            //toast...
+        }
+    }, [handleUpload])
+
+    const { getRootProps, getInputProps, isDragActive, isFocused } = 
+        useDropzone({ 
+            onDrop,
+            maxFiles: 1,
+            accept : {
+                "application/pdf": [".pdf"]
+            }
+        })
 
     return (
         <div className='flex flex-col items-center max-w-7xl mx-auto'>
@@ -21,7 +37,23 @@ const FileUploader = () => {
                 <input {...getInputProps()} />
                 <div className='flex flex-col items-center justify-center'>
                     {
-                        isDragActive ? (
+                        status === 'uploading' ? (
+                            <>
+                                <RocketIcon className='h-20 w-20 animate-spin' />
+                                <p>Uploading your file...</p>
+                            </>
+                        ) : status === 'uploaded' ? (
+                            <>
+                                <RocketIcon className='h-20 w-20 text-green-600' />
+                                <p>File uploaded successfully!</p>
+                                <p className='text-sm text-gray-600'>File ID: {fileId}</p>
+                            </>
+                        ) : status === 'error' ? (
+                            <>
+                                <CircleArrowDown className='h-16 w-16 text-red-600' />
+                                <p className='text-red-600'>Upload failed. Please try again.</p>
+                            </>
+                        ) : isDragActive ? (
                             <>
                                 <RocketIcon className='h-20 w-20 animate-ping' />
                                 <p>Drop the files here ...</p>
