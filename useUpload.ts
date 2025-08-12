@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid'; // to give unique ids to the uploaded files
 export enum StatusText {
     UPLOADING = 'uploading',
     UPLOADED = 'uploaded',
+    SUCCESS = 'success',
     ERROR = 'error',
     IDLE = 'idle',
     SAVING = 'saving',
@@ -19,7 +20,17 @@ function useUpload() {
   const [progress, setProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>(StatusText.IDLE);
   const [fileId, setFileId] = useState<string | null>(null);
+  const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter(); // used to redirect the user
+
+  const cancelRedirect = () => {
+    if (redirectTimer) {
+      clearTimeout(redirectTimer);
+      setRedirectTimer(null);
+    }
+    setStatus(StatusText.IDLE);
+    setFileId(null);
+  };
 
   const handleUpload = async (file: File) => {
     console.log("handleUpload called with file:", { 
@@ -59,10 +70,14 @@ function useUpload() {
 
       if (response.ok) {
         const data = await response.json();
-        setStatus(StatusText.UPLOADED);
+        setStatus(StatusText.SUCCESS);
         console.log('Upload successful:', data);
-        // Optionally redirect to dashboard or show success message
-        // router.push('/dashboard');
+        
+        // Set up redirect timer
+        const timer = setTimeout(() => {
+          router.push('/dashboard');
+        }, 3000);
+        setRedirectTimer(timer);
       } else {
         const errorData = await response.json();
         console.error('Upload failed with status:', response.status);
@@ -75,7 +90,7 @@ function useUpload() {
     }
   };
 
-  return { progress, status, fileId, handleUpload };
+  return { progress, status, fileId, handleUpload, cancelRedirect };
 }
 
 export default useUpload
