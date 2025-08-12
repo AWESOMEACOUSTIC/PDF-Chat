@@ -3,18 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PlaceholderDocument from "./PlaceholderDocument";
-
-interface Document {
-  id: string;
-  fileId: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-  fileUrl: string;
-  uploadedAt: string;
-  status: string;
-  gridFsId: string;
-}
+import { Document, DocumentsResponse } from "@/types/chat";
 
 function Documents() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -26,7 +15,7 @@ function Documents() {
     const fetchDocuments = async () => {
       try {
         const response = await fetch('/api/documents?userId=demo-user');
-        const data = await response.json();
+        const data: DocumentsResponse = await response.json();
         
         if (data.success) {
           setDocuments(data.documents);
