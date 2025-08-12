@@ -30,6 +30,7 @@ function useUpload() {
     }
     setStatus(StatusText.IDLE);
     setFileId(null);
+    setProgress(null); // Reset progress when canceling
   };
 
   const handleUpload = async (file: File) => {
@@ -49,6 +50,8 @@ function useUpload() {
     setFileId(fileIdToUploadTo);
 
     setStatus(StatusText.UPLOADING);
+    setProgress(0); // Initialize progress
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('fileId', fileIdToUploadTo);
@@ -57,9 +60,38 @@ function useUpload() {
     console.log("Form data prepared, making request to /api/upload");
 
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      // Create XMLHttpRequest for progress tracking
+      const xhr = new XMLHttpRequest();
+      
+      // Track upload progress
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          setProgress(percentComplete);
+          console.log(`Upload progress: ${percentComplete}%`);
+        }
+      };
+
+      // Handle response
+      const response = await new Promise<Response>((resolve, reject) => {
+        xhr.onload = () => {
+          const response = new Response(xhr.response, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+            headers: new Headers(xhr.getAllResponseHeaders().split('\r\n').reduce((headers, line) => {
+              const [key, value] = line.split(': ');
+              if (key && value) headers[key] = value;
+              return headers;
+            }, {} as Record<string, string>))
+          });
+          resolve(response);
+        };
+
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.onabort = () => reject(new Error('Upload aborted'));
+
+        xhr.open('POST', '/api/upload');
+        xhr.send(formData);
       });
 
       console.log("Response received:", { 
@@ -70,23 +102,26 @@ function useUpload() {
 
       if (response.ok) {
         const data = await response.json();
+        setProgress(100); // Ensure progress shows 100% on success
         setStatus(StatusText.SUCCESS);
         console.log('Upload successful:', data);
         
         // Set up redirect timer
         const timer = setTimeout(() => {
           router.push('/dashboard');
-        }, 3000);
+        }, 5000);
         setRedirectTimer(timer);
       } else {
         const errorData = await response.json();
         console.error('Upload failed with status:', response.status);
         console.error('Error data:', errorData);
         setStatus(StatusText.ERROR);
+        setProgress(null); // Reset progress on error
       }
     } catch (error) {
       console.error('Upload error (network/parse):', error);
       setStatus(StatusText.ERROR);
+      setProgress(null); // Reset progress on error
     }
   };
 

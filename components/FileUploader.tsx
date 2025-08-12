@@ -68,7 +68,28 @@ const FileUploader = () => {
                             <>
                                 <RocketIcon className='h-20 w-20 animate-spin text-blue-600' />
                                 <p className="text-lg font-semibold text-blue-600 mt-4">Uploading your file...</p>
-                                <p className="text-sm text-gray-600">Please wait while we process your PDF</p>
+                                <p className="text-sm text-gray-600 mb-4">{uploadedFileName}</p>
+                                
+                                {/* Progress Bar */}
+                                <div className="w-80 bg-gray-200 rounded-full h-3 mb-4">
+                                    <div 
+                                        className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
+                                        style={{ width: `${progress || 0}%` }}
+                                    ></div>
+                                </div>
+                                
+                                {/* Progress Text */}
+                                <div className="text-center">
+                                    <p className="text-lg font-bold text-blue-600">
+                                        {progress !== null ? `${progress}%` : '0%'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {progress === null || progress < 10 ? 'Initializing upload...' :
+                                         progress < 50 ? 'Uploading to server...' :
+                                         progress < 90 ? 'Processing file...' :
+                                         'Almost done...'}
+                                    </p>
+                                </div>
                             </>
                         ) : status === StatusText.SUCCESS ? (
                             <>
