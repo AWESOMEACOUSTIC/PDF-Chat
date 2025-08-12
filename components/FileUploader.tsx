@@ -11,6 +11,7 @@ const FileUploader = () => {
     progress,
     status,
     fileId,
+    uploadedFileInfo,
     handleUpload,
     cancelRedirect
   } = useUpload();  // to get the upload status
@@ -98,7 +99,21 @@ const FileUploader = () => {
                                 <p className="text-lg text-gray-700 mt-2">{uploadedFileName}</p>
                                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4 max-w-md">
                                     <p className="text-sm text-green-700 font-medium">✅ File successfully uploaded</p>
-                                    <p className="text-xs text-green-600 mt-1">File ID: {fileId}</p>
+                                    {uploadedFileInfo && (
+                                        <>
+                                            <p className="text-xs text-green-600 mt-1">File ID: {uploadedFileInfo.fileId}</p>
+                                            <p className="text-xs text-green-600">Document ID: {uploadedFileInfo.documentId}</p>
+                                            <div className="mt-2 p-2 bg-blue-50 rounded border">
+                                                <p className="text-xs text-blue-700 font-medium">📁 File ready for viewing</p>
+                                                <button
+                                                    onClick={() => window.open(`/api/files/${uploadedFileInfo.gridFsId}`, '_blank')}
+                                                    className="mt-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                                >
+                                                    Preview File
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                     <p className="text-sm text-green-700 mt-3">
                                         Redirecting to dashboard in <span className="font-bold text-green-800">{countdown}</span> seconds...
                                     </p>

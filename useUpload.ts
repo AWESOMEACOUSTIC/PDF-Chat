@@ -20,6 +20,12 @@ function useUpload() {
   const [progress, setProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>(StatusText.IDLE);
   const [fileId, setFileId] = useState<string | null>(null);
+  const [uploadedFileInfo, setUploadedFileInfo] = useState<{
+    fileId: string;
+    documentId: string;
+    gridFsId: string;
+    fileName: string;
+  } | null>(null);
   const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter(); // used to redirect the user
 
@@ -31,6 +37,28 @@ function useUpload() {
     setStatus(StatusText.IDLE);
     setFileId(null);
     setProgress(null); // Reset progress when canceling
+    setUploadedFileInfo(null); // Reset uploaded file info
+  };
+
+  const fetchUploadedFile = async (gridFsId: string) => {
+    try {
+      console.log(`Fetching uploaded file with GridFS ID: ${gridFsId}`);
+      // Just verify the file exists - we'll handle display in the dashboard
+      const response = await fetch(`/api/files/${gridFsId}`, {
+        method: 'HEAD', // Just check if file exists without downloading
+      });
+      
+      if (response.ok) {
+        console.log('File successfully verified on server');
+        return true;
+      } else {
+        console.warn('File verification failed:', response.status);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error verifying uploaded file:', error);
+      return false;
+    }
   };
 
   const handleUpload = async (file: File) => {
@@ -103,8 +131,25 @@ function useUpload() {
       if (response.ok) {
         const data = await response.json();
         setProgress(100); // Ensure progress shows 100% on success
-        setStatus(StatusText.SUCCESS);
+        
+        // Store uploaded file information
+        const uploadedFile = {
+          fileId: data.fileId,
+          documentId: data.documentId,
+          gridFsId: data.gridFsId,
+          fileName: file.name
+        };
+        setUploadedFileInfo(uploadedFile);
+        
         console.log('Upload successful:', data);
+        
+        // Verify the file exists on the server
+        const fileExists = await fetchUploadedFile(data.gridFsId);
+        if (fileExists) {
+          console.log('File verified successfully on server');
+        }
+        
+        setStatus(StatusText.SUCCESS);
         
         // Set up redirect timer
         const timer = setTimeout(() => {
@@ -125,7 +170,7 @@ function useUpload() {
     }
   };
 
-  return { progress, status, fileId, handleUpload, cancelRedirect };
+  return { progress, status, fileId, uploadedFileInfo, handleUpload, cancelRedirect };
 }
 
 export default useUpload
