@@ -1,141 +1,126 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import connectToDatabase from "@/lib/mongodb";
-
 import { DocumentModel } from "@/lib/models";
+import { 
+  generateEmbeddingPineconeVectorStore, 
+  answerQuestionAboutDocument 
+} from "@/lib/langchain";
 
 export const runtime = "nodejs";
 
 export async function POST(
-
-    req: NextRequest,
-
-    { params }: { params: { fileId: string } }
-
+  req: NextRequest,
+  { params }: { params: { fileId: string } }
 ) {
+  try {
+    const { message, userId = "demo-user" } = await req.json();
+    const { fileId } = params;
 
-    try {
-
-        const { message, userId = "demo-user" } = await req.json();
-
-        const { fileId } = params;
-
-        if (!message || !fileId) {
-
-            return NextResponse.json(
-
-                { error: "Message and fileId are required" },
-
-                { status: 400 }
-
-            );
-
-        }
-
-        // Connect to database
-
-        await connectToDatabase();
-
-        // Find the document
-
-        const document = await DocumentModel.findOne({
-
-            clientFileId: fileId,
-
-            userId
-
-        });
-
-        if (!document) {
-
-            return NextResponse.json(
-
-                { error: "Document not found" },
-
-                { status: 404 }
-
-            );
-
-        }
-
-        // TODO: Implement AI chat logic here
-
-        // This is where i would:
-
-        // 1. Extract text from the PDF using the GridFS ID
-
-        // 2. Create embeddings for the PDF content
-
-        // 3. Process the user's message with AI
-
-        // 4. Generate a contextual response based on the document
-
-        // For now, return a placeholder response
-
-        const aiResponse = `This is a placeholder AI response for my question: "${message}" about the document "${document.fileName}".
-
-In the future, this endpoint will:
-
-• Extract text content from the PDF
-
-• Create vector embeddings of the document
-
-• Use AI to understand your question
-
-• Provide intelligent answers based on the document content
-
-Document Info:
-
-• File: ${document.fileName}
-
-• Size: ${(document.fileSize / 1024 / 1024).toFixed(2)} MB
-
-• Uploaded: ${document.uploadedAt.toLocaleDateString()}
-
-• GridFS ID: ${document.metadata.gridFsId}`;
-
-        // Simulate processing time
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        return NextResponse.json({
-
-            success: true,
-
-            response: aiResponse,
-
-            documentInfo: {
-
-                fileName: document.fileName,
-
-                fileSize: document.fileSize,
-
-                uploadedAt: document.uploadedAt,
-
-                gridFsId: document.metadata.gridFsId
-
-            }
-
-        });
-
-    } catch (error) {
-
-        console.error("Chat API error:", error);
-
-        return NextResponse.json(
-
-            {
-
-                error: "Failed to process chat message",
-
-                details: error instanceof Error ? error.message : "Unknown error"
-
-            },
-
-            { status: 500 }
-
-        );
-
+    if (!message || !fileId) {
+      return NextResponse.json(
+        { error: "Message and fileId are required" },
+        { status: 400 }
+      );
     }
 
+    // Connect to database
+    await connectToDatabase();
+
+    // Find the document
+    const document = await DocumentModel.findOne({
+      clientFileId: fileId,
+      userId
+    });
+
+    if (!document) {
+      return NextResponse.json(
+        { error: "Document not found" },
+        { status: 404 }
+      );
+    }
+
+    const gridFsId = document.metadata.gridFsId;
+    const docId = document._id.toString();
+
+    try {
+      // Check if embeddings exist for this document, if not create them
+      let aiResponse: string;
+      
+      try {
+        // Try to answer the question using existing embeddings
+        const result = await answerQuestionAboutDocument(docId, message);
+        aiResponse = result.answer;
+        
+        // If the answer indicates no information found, it might be the first query
+        if (aiResponse.toLowerCase().includes("cannot find") || 
+            aiResponse.toLowerCase().includes("no information")) {
+          throw new Error("Embeddings might not exist");
+        }
+        
+      } catch (embeddingError) {
+        console.log("Creating embeddings for document:", docId);
+        
+        // Generate embeddings for this document
+        await generateEmbeddingPineconeVectorStore(gridFsId, docId);
+        
+        // Wait a moment for Pinecone to index
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Try answering again
+        const result = await answerQuestionAboutDocument(docId, message);
+        aiResponse = result.answer;
+      }
+
+      return NextResponse.json({
+        success: true,
+        response: aiResponse,
+        documentInfo: {
+          fileName: document.fileName,
+          fileSize: document.fileSize,
+          uploadedAt: document.uploadedAt,
+          gridFsId: document.metadata.gridFsId
+        }
+      });
+
+    } catch (aiError) {
+      console.error("AI processing error:", aiError);
+      
+      // Fallback response if AI processing fails
+      const fallbackResponse = `I'm having trouble processing your question about "${document.fileName}" right now. This could be due to:
+
+• The document text extraction is still processing
+• The AI service is temporarily unavailable
+• The document format may not be supported
+
+Please try asking your question again in a moment.
+
+Document Info:
+• File: ${document.fileName}
+• Size: ${(document.fileSize / 1024 / 1024).toFixed(2)} MB
+• Uploaded: ${document.uploadedAt.toLocaleDateString()}
+
+Your question: "${message}"`;
+
+      return NextResponse.json({
+        success: true,
+        response: fallbackResponse,
+        documentInfo: {
+          fileName: document.fileName,
+          fileSize: document.fileSize,
+          uploadedAt: document.uploadedAt,
+          gridFsId: document.metadata.gridFsId
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error("Chat API error:", error);
+    return NextResponse.json(
+      {
+        error: "Failed to process chat message",
+        details: error instanceof Error ? error.message : "Unknown error"
+      },
+      { status: 500 }
+    );
+  }
 }
