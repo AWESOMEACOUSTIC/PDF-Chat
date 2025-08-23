@@ -80,5 +80,122 @@ export async function generateEmbeddingPineconeVectorStore(gridFsId: string, doc
     const pdfBuffer = Buffer.concat(chunks);
     console.log(`PDF buffer size: ${pdfBuffer.length} bytes`);
 
+    // Extract text from PDF using pdf-parse
+    const pdfData = await pdfParse(pdfBuffer);
+    const pdfText = pdfData.text;
     
+    if (!pdfText || pdfText.trim().length === 0) {
+      throw new Error("No text content found in PDF");
+    }
+
+    console.log(`Extracted text length: ${pdfText.length} characters`);
+
+    // Split text into manageable chunks
+    const textSplitter = new RecursiveCharacterTextSplitter({
+      chunkSize: 1000,
+      chunkOverlap: 200,
+    });
+
+    // Create documents from text chunks
+    const docs = await textSplitter.createDocuments([pdfText]);
+    
+    // Add metadata to each document
+    const docsWithMetadata = docs.map((doc, index) => {
+      return new Document({
+        pageContent: doc.pageContent,
+        metadata: {
+          docId: docId,
+          gridFsId: gridFsId,
+          chunkIndex: index,
+          fileName: fileInfo.filename,
+          uploadDate: fileInfo.uploadDate,
+        },
+      });
+    });
+
+    console.log(`Created ${docsWithMetadata.length} text chunks`);
+
+    // Initialize Pinecone index
+    const pineconeIndex = pinecone.Index(indexName);
+
+    // Create or update Pinecone vector store
+    const vectorStore = await PineconeStore.fromDocuments(
+      docsWithMetadata,
+      embeddings,
+      {
+        pineconeIndex,
+        namespace: `doc-${docId}`, // Use namespace to isolate documents
+      }
+    );
+
+    console.log(`Successfully created embeddings for document ${docId}`);
+    
+    return vectorStore;
+
+  } catch (error) {
+    console.error("Error generating embeddings:", error);
+    throw new Error(`Failed to generate embeddings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
+
+/**
+ * Create a retrieval chain for answering questions about a specific document
+ * 
+ * Logic Flow:
+ * 1. Get the vector store for the specific document
+ * 2. Create a retriever that finds relevant text chunks
+ * 3. Set up prompts for contextual question answering
+ * 4. Create a chain that combines retrieved context with user questions
+ * 5. Return responses based on document content
+ */
+export async function createDocumentQAChain(docId: string) {
+  try {
+    // Initialize Pinecone index
+    const pineconeIndex = pinecone.Index(indexName);
+    
+    // Create vector store from existing embeddings
+    const vectorStore = new PineconeStore(embeddings, {
+      pineconeIndex,
+      namespace: `doc-${docId}`,
+    });
+
+    // Create retriever
+    const retriever = vectorStore.asRetriever({
+      k: 6, // Retrieve top 6 most relevant chunks
+    });
+
+    // Define prompt template for question answering
+    const qaPrompt = ChatPromptTemplate.fromTemplate(`
+      Use the following context to answer the user's question about the document.
+      If you cannot find the answer in the provided context, say "I cannot find that information in the document."
+      
+      Context: {context}
+      
+      Question: {input}
+      
+      Answer:
+    `);
+
+    // Create document chain
+    const documentChain = await createStuffDocumentsChain({
+      llm: model,
+      prompt: qaPrompt,
+    });
+
+    // Create retrieval chain
+    const retrievalChain = await createRetrievalChain({
+      combineDocsChain: documentChain,
+      retriever,
+    });
+
+    return retrievalChain;
+
+  } catch (error) {
+    console.error("Error creating QA chain:", error);
+    throw new Error(`Failed to create QA chain: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Answer a question about a specific document using the QA chain
+ */
