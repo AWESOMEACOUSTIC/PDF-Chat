@@ -199,3 +199,21 @@ export async function createDocumentQAChain(docId: string) {
 /**
  * Answer a question about a specific document using the QA chain
  */
+export async function answerQuestionAboutDocument(docId: string, question: string) {
+  try {
+    const qaChain = await createDocumentQAChain(docId);
+    
+    const response = await qaChain.invoke({
+      input: question,
+    });
+
+    return {
+      answer: response.answer,
+      sourceDocuments: response.context || [],
+    };
+
+  } catch (error) {
+    console.error("Error answering question:", error);
+    throw new Error(`Failed to answer question: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
