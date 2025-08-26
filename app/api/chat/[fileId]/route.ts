@@ -46,10 +46,14 @@ export async function POST(
       // Check if embeddings exist for this document, if not create them
       let aiResponse: string;
       
+      console.log(`Processing chat for document: ${docId}, gridFsId: ${gridFsId}`);
+      
       try {
         // Try to answer the question using existing embeddings
+        console.log(`Attempting to answer question: "${message}"`);
         const result = await answerQuestionAboutDocument(docId, message);
         aiResponse = result.answer;
+        console.log(`AI Response received: ${aiResponse.substring(0, 100)}...`);
         
         // If the answer indicates no information found, it might be the first query
         if (aiResponse.toLowerCase().includes("cannot find") || 
@@ -58,6 +62,7 @@ export async function POST(
         }
         
       } catch (embeddingError) {
+        console.log("Embedding error occurred:", embeddingError);
         console.log("Creating embeddings for document:", docId);
         
         // Generate embeddings for this document

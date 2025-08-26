@@ -12,7 +12,6 @@ import { Index, RecordMetadata } from "@pinecone-database/pinecone";
 import connectToDatabase from "./mongodb";
 import { GridFSBucket, ObjectId } from "mongodb";
 import mongoose from "mongoose";
-import pdfParse from "pdf-parse";
 
 // Initialize OpenAI model with API Key and model name
 const model = new ChatOpenAI({
@@ -79,6 +78,9 @@ export async function generateEmbeddingPineconeVectorStore(gridFsId: string, doc
 
     const pdfBuffer = Buffer.concat(chunks);
     console.log(`PDF buffer size: ${pdfBuffer.length} bytes`);
+
+    // Dynamic import for pdf-parse to avoid Next.js build issues
+    const pdfParse = (await import('pdf-parse')).default;
 
     // Extract text from PDF using pdf-parse
     const pdfData = await pdfParse(pdfBuffer);
@@ -150,19 +152,24 @@ export async function generateEmbeddingPineconeVectorStore(gridFsId: string, doc
  */
 export async function createDocumentQAChain(docId: string) {
   try {
+    console.log(`Creating QA chain for document: ${docId}`);
+    
     // Initialize Pinecone index
     const pineconeIndex = pinecone.Index(indexName);
+    console.log(`Pinecone index initialized: ${indexName}`);
     
     // Create vector store from existing embeddings
     const vectorStore = new PineconeStore(embeddings, {
       pineconeIndex,
       namespace: `doc-${docId}`,
     });
+    console.log(`Vector store created with namespace: doc-${docId}`);
 
     // Create retriever
     const retriever = vectorStore.asRetriever({
       k: 6, // Retrieve top 6 most relevant chunks
     });
+    console.log(`Retriever created with k=6`);
 
     // Define prompt template for question answering
     const qaPrompt = ChatPromptTemplate.fromTemplate(`
@@ -181,12 +188,14 @@ export async function createDocumentQAChain(docId: string) {
       llm: model,
       prompt: qaPrompt,
     });
+    console.log(`Document chain created`);
 
     // Create retrieval chain
     const retrievalChain = await createRetrievalChain({
       combineDocsChain: documentChain,
       retriever,
     });
+    console.log(`Retrieval chain created successfully`);
 
     return retrievalChain;
 
@@ -201,11 +210,16 @@ export async function createDocumentQAChain(docId: string) {
  */
 export async function answerQuestionAboutDocument(docId: string, question: string) {
   try {
+    console.log(`Starting question answering for document: ${docId}`);
+    console.log(`Question: ${question}`);
+    
     const qaChain = await createDocumentQAChain(docId);
     
     const response = await qaChain.invoke({
       input: question,
     });
+
+    console.log(`QA Chain response received:`, response);
 
     return {
       answer: response.answer,
