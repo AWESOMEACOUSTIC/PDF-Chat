@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import { DocumentModel } from "@/lib/models";
-import { generateEmbeddingPineconeVectorStore } from "@/lib/langchain";
+import { generateEmbeddingsInPineconeVectorStore } from "@/lib/langchain";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     console.log(`Starting embedding generation for document: ${document.fileName}`);
 
     // Generate embeddings
-    const vectorStore = await generateEmbeddingPineconeVectorStore(gridFsId, docId);
+    const vectorStore = await generateEmbeddingsInPineconeVectorStore(gridFsId, docId);
 
     // Update document status to indicate embeddings are ready
     await DocumentModel.findByIdAndUpdate(document._id, {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import { DocumentModel } from "@/lib/models";
 import { 
-  generateEmbeddingPineconeVectorStore, 
+  generateEmbeddingsInPineconeVectorStore, 
   answerQuestionAboutDocument 
 } from "@/lib/langchain";
 
@@ -51,7 +51,7 @@ export async function POST(
       try {
         // Try to answer the question using existing embeddings
         console.log(`Attempting to answer question: "${message}"`);
-        const result = await answerQuestionAboutDocument(docId, message);
+        const result = await answerQuestionAboutDocument(gridFsId, docId, message);
         aiResponse = result.answer;
         console.log(`AI Response received: ${aiResponse.substring(0, 100)}...`);
         
@@ -66,13 +66,13 @@ export async function POST(
         console.log("Creating embeddings for document:", docId);
         
         // Generate embeddings for this document
-        await generateEmbeddingPineconeVectorStore(gridFsId, docId);
+        await generateEmbeddingsInPineconeVectorStore(gridFsId, docId);
         
         // Wait a moment for Pinecone to index
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Try answering again
-        const result = await answerQuestionAboutDocument(docId, message);
+        const result = await answerQuestionAboutDocument(gridFsId, docId, message);
         aiResponse = result.answer;
       }
 
