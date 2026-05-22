@@ -1,14 +1,15 @@
-import "dotenv/config"; // Ensure env vars are loaded
+import "dotenv/config";
 import mongoose from "mongoose";
-import connectToDatabase from "./lib/config/mongodb"// Adjust path if needed
+import connectToDatabase from "./lib/config/mongodb";
+import pinecone from "./lib/config/pinecone";
 import { generateDocs } from "./lib/langchain/documentLoader";
 import { generateEmbeddingsInPineconeVectorStore, getVectorStoreForDoc } from "./lib/langchain/vectorStore";
 import { answerQuestionAboutDocument } from "./lib/langchain/index";
 
-// REPLACE THESE WITH REAL IDs FROM YOUR DATABASE
-const TEST_GRIDFS_ID = "689acd942f05190acf36dc83"; 
-const TEST_DOC_ID = "test-doc-namespace-003";
-const TEST_QUESTION = "What is the main topic of this document?";
+
+const TEST_GRIDFS_ID = "6a1095ecf050da6e688138a5"; 
+const TEST_DOC_ID = "6a1095ecf050da6e688138a7";
+const TEST_QUESTION = "Can you explain me the main topic of this document and provide a brief summary?";
 
 async function runTests() {
   console.log("🚀 Starting RAG Pipeline Tests...\n");
@@ -36,25 +37,47 @@ async function runTests() {
     const vectorStore = await generateEmbeddingsInPineconeVectorStore(TEST_GRIDFS_ID, TEST_DOC_ID);
     console.log(`✅ Success: Vectors stored/verified in namespace '${TEST_DOC_ID}'.\n`);
 
-   // ==========================================
-    // STAGE 3: Test Retrieval (Upgraded with IDs & Scores)
     // ==========================================
-    console.log("🛠️ STAGE 3: Testing Pinecone Retrieval...");
+    // STAGE 3A: Broad Retrieval (Base Vector Search)
+    // ==========================================
+    console.log("🛠️ STAGE 3A: Testing Broad Pinecone Retrieval...");
     const retrieverStore = await getVectorStoreForDoc(TEST_DOC_ID);
     
-    // Using similaritySearchWithScore to get [Document, Score] tuples
-    const retrievedDocs = await retrieverStore.similaritySearchWithScore(TEST_QUESTION, 2);
-    console.log(`✅ Success: Retrieved ${retrievedDocs.length} relevant chunks.`);
-    
-    if (retrievedDocs.length > 0) {
-      retrievedDocs.forEach(([doc, score], index) => {
-        console.log(`\n--- Match ${index + 1} ---`);
-        // doc.id contains the Pinecone Vector ID in newer LangChain versions
-        console.log(`🔹 Vector ID:   ${doc.id || "Not exposed by current LangChain version"}`);
-        console.log(`🔹 Match Score: ${score.toFixed(4)}`);
-        console.log(`🔹 Chunk Index: ${doc.metadata.chunkIndex} (From your documentLoader)`);
-        console.log(`🔹 Content:     ${doc.pageContent.substring(0, 120)}...\n`);
-      });
+    // Fetch top 15 for the reranker
+    const searchResults = await retrieverStore.similaritySearchWithScore(TEST_QUESTION, 15);
+    console.log(`✅ Success: Retrieved ${searchResults.length} initial chunks using base search.\n`);
+
+    // ==========================================
+    // STAGE 3B: Precision Reranking
+    // ==========================================
+    console.log("🛠️ STAGE 3B: Testing Pinecone Inference Reranker...");
+    if (searchResults.length > 0) {
+      const docStrings = searchResults.map(([doc]) => doc.pageContent);
+
+      const rerankResponse = await pinecone.inference.rerank(
+        "bge-reranker-v2-m3",
+        TEST_QUESTION,
+        docStrings,
+        {
+          topN: 5,
+          returnDocuments: false,
+        }
+      );
+
+      if (rerankResponse.data) {
+        console.log(`✅ Success: Reranked down to top ${rerankResponse.data.length} strictly relevant chunks.`);
+        
+        rerankResponse.data.forEach((item, index) => {
+          const originalDoc = searchResults[item.index][0];
+          console.log(`\n--- Top Match ${index + 1} ---`);
+          console.log(`🔹 Vector ID:    ${originalDoc.id || "N/A"}`);
+          console.log(`🔹 Rerank Score: ${item.score.toFixed(4)}`);
+          console.log(`🔹 Chunk Index:  ${originalDoc.metadata.chunkIndex}`);
+          console.log(`🔹 Content:      ${originalDoc.pageContent.substring(0, 100)}...\n`);
+        });
+      }
+    } else {
+      console.log("⚠️ No chunks retrieved, skipping reranking.");
     }
 
     // ==========================================
