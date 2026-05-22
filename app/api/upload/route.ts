@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { GridFSBucket } from "mongodb";
 import { Readable } from "stream";
-import connectToDatabase from "@/lib/mongodb";
+import connectToDatabase from "@/lib/config/mongodb";
 import { DocumentModel } from "@/lib/models";
 
 export const runtime = "nodejs"; // required for Node streams
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Create GridFS bucket
     console.log("Creating GridFS bucket...");
-    const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+    const bucket = new mongoose.mongo.GridFSBucket(db, { bucketName: "uploads" });
 
     // Convert Web ReadableStream -> Node stream (no full buffering)
     function webStreamToNode(stream: ReadableStream<Uint8Array>) {

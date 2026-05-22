@@ -1,4 +1,4 @@
-import connectToDatabase from '@/lib/mongodb';
+import connectToDatabase from "@/lib/config/mongodb";
 import { DocumentModel, ChatMessageModel } from '@/lib/models';
 
 // Database connection and models for server-side operations

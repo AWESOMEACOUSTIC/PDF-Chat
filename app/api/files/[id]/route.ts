@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectToDatabase from "@/lib/mongodb";
-import { GridFSBucket, ObjectId } from "mongodb";
+import connectToDatabase from "@/lib/config/mongodb";
 import { Readable } from "stream";
 import mongoose from "mongoose";
 
@@ -24,12 +23,12 @@ export async function GET(
     }
 
     // Create GridFS bucket
-    const bucket = new GridFSBucket(db, { bucketName: "uploads" });
+    const bucket =  new mongoose.mongo.GridFSBucket(db, { bucketName: "uploads" });
 
     // Validate and convert the ID to ObjectId
-    let fileObjectId: ObjectId;
+    let fileObjectId: mongoose.Types.ObjectId;
     try {
-      fileObjectId = new ObjectId(params.id);
+      fileObjectId = new mongoose.Types.ObjectId(params.id);
     } catch (error) {
       return NextResponse.json({ message: "Invalid file ID" }, { status: 400 });
     }

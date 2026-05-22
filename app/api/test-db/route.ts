@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     // Try to connect to MongoDB
-    const { default: connectToDatabase } = await import('@/lib/mongodb');
+    const { default: connectToDatabase } = await import("@/lib/config/mongodb");
     const { DocumentModel } = await import('@/lib/models');
     
     await connectToDatabase();

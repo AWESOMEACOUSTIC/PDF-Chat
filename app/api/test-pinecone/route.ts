@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import pinecone from "@/lib/pinecone";
+import pinecone from "@/lib/config/pinecone";
 import { indexName } from "@/lib/langchain";
 
 export const runtime = "nodejs";

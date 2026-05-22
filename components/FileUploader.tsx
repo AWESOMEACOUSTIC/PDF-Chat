@@ -92,6 +92,16 @@ const FileUploader = () => {
                                     </p>
                                 </div>
                             </>
+                        ) : status === StatusText.GENERATING ? (
+                            <>
+                                <RocketIcon className='h-20 w-20 animate-pulse text-purple-600' />
+                                <p className="text-lg font-semibold text-purple-600 mt-4">Processing your document...</p>
+                                <p className="text-sm text-gray-600 mb-4">{uploadedFileName}</p>
+                                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mt-4 max-w-md">
+                                    <p className="text-sm text-purple-700 font-medium">🔄 Generating AI embeddings...</p>
+                                    <p className="text-xs text-purple-600 mt-1">This may take a moment</p>
+                                </div>
+                            </>
                         ) : status === StatusText.SUCCESS ? (
                             <>
                                 <CheckCircle className='h-24 w-24 text-green-600 animate-pulse' />

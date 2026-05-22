@@ -149,7 +149,37 @@ function useUpload() {
           console.log('File verified successfully on server');
         }
         
-        setStatus(StatusText.SUCCESS);
+        // Generate embeddings after successful upload
+        console.log('🚀 Starting embedding generation...');
+        setStatus(StatusText.GENERATING);
+        
+        try {
+          const embeddingsResponse = await fetch('/api/embeddings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fileId: data.fileId,
+              userId: 'demo-user'
+            })
+          });
+          
+          if (embeddingsResponse.ok) {
+            const embeddingsData = await embeddingsResponse.json();
+            console.log('✅ Embeddings generated successfully:', embeddingsData);
+            setStatus(StatusText.SUCCESS);
+          } else {
+            const embeddingsError = await embeddingsResponse.json();
+            console.error('❌ Embeddings generation failed:', embeddingsError);
+            // Still show success for upload, but log the embeddings error
+            setStatus(StatusText.SUCCESS);
+          }
+        } catch (embeddingsError) {
+          console.error('❌ Embeddings API call failed:', embeddingsError);
+          // Still show success for upload, but log the embeddings error
+          setStatus(StatusText.SUCCESS);
+        }
         
         // Set up redirect timer
         const timer = setTimeout(() => {
