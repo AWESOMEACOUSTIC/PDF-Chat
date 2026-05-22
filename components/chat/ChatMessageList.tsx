@@ -1,6 +1,8 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 
 interface ChatMessage {
   id: string;
@@ -12,6 +14,89 @@ interface ChatMessage {
 interface ChatMessageListProps {
   messages: ChatMessage[];
   sendingMessage: boolean;
+}
+
+interface MarkdownMessageProps {
+  content: string;
+}
+
+const markdownComponents: Components = {
+  h1: ({ children }) => (
+    <h1 className="mb-3 text-lg font-semibold text-gray-900">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-2 text-base font-semibold text-gray-900">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-2 text-sm font-semibold text-gray-900">{children}</h3>
+  ),
+  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>
+  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  strong: ({ children }) => (
+    <strong className="font-semibold text-gray-900">{children}</strong>
+  ),
+  em: ({ children }) => <em className="italic text-gray-800">{children}</em>,
+  blockquote: ({ children }) => (
+    <blockquote className="mb-3 border-l-2 border-gray-300 pl-3 text-gray-700 last:mb-0">
+      {children}
+    </blockquote>
+  ),
+  code: ({ className, children, ...props }) => {
+    const text = String(children ?? "");
+    const isBlock = text.includes("\n");
+
+    if (isBlock) {
+      const codeClassName = [
+        "font-mono text-xs text-gray-100",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return (
+        <code className={codeClassName} {...props}>
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <code
+        className="rounded bg-gray-200/70 px-1 py-0.5 font-mono text-[0.85em] text-gray-800"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }) => (
+    <pre className="mb-3 overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100 last:mb-0">
+      {children}
+    </pre>
+  ),
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-blue-600 underline-offset-2 hover:underline"
+    >
+      {children}
+    </a>
+  ),
+};
+
+export function MarkdownMessage({ content }: MarkdownMessageProps) {
+  return (
+    <div className="text-sm leading-relaxed text-gray-800">
+      <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+    </div>
+  );
 }
 
 export default function ChatMessageList({ messages, sendingMessage }: ChatMessageListProps) {
@@ -36,7 +121,13 @@ export default function ChatMessageList({ messages, sendingMessage }: ChatMessag
                 : 'bg-gray-100 text-gray-800'
             }`}
           >
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.type === "ai" ? (
+              <MarkdownMessage content={message.content} />
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                {message.content}
+              </p>
+            )}
             <p
               className={`text-xs mt-2 ${
                 message.type === 'user' ? 'text-blue-100' : 'text-gray-500'

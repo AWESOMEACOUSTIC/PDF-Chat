@@ -10,11 +10,11 @@ export const runtime = "nodejs";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { fileId: string } }
+  { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
     const { message, userId = "demo-user" } = await req.json();
-    const { fileId } = params;
+    const { fileId } = await params;
 
     if (!message || !fileId) {
       return NextResponse.json(

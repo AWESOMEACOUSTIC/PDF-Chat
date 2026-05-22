@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export async function GET(
   req: NextRequest, 
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Since authentication is removed, we'll serve files without user check
@@ -28,7 +28,8 @@ export async function GET(
     // Validate and convert the ID to ObjectId
     let fileObjectId: mongoose.Types.ObjectId;
     try {
-      fileObjectId = new mongoose.Types.ObjectId(params.id);
+      const { id } = await params;
+      fileObjectId = new mongoose.Types.ObjectId(id);
     } catch (error) {
       return NextResponse.json({ message: "Invalid file ID" }, { status: 400 });
     }
