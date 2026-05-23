@@ -8,6 +8,7 @@ import {
   getChatModel,
   useFallbackModel,
 } from "./embeddings";
+import { hybridSearch } from "./hybridSearch";
 import {
   generateEmbeddingsInPineconeVectorStore,
   getVectorStoreForDoc,
@@ -33,24 +34,32 @@ export async function answerQuestionAboutDocument(
 ) {
   console.log(`QA request: docId=${docId} question="${question}"`);
 
-  // 1. Get the vector store connection
-  const vectorStore = await generateEmbeddingsInPineconeVectorStore(gridFsId, docId);
+  // 1. Ensure embeddings exist for dense + sparse indexes
+  await generateEmbeddingsInPineconeVectorStore(gridFsId, docId);
 
   // 2. Determine the search query
   const wantsOverview = /\boverview|summary|summarize|what is this\b/i.test(question);
   const searchQuery = wantsOverview ? "document overview and summary" : question;
 
-  // 3. STAGE 1: BROAD RETRIEVAL
-  // Retrive more documents initially (e.g., 15) to give the reranker a broad pool
-  let searchResults: [Document, number][] = [];
+  // 3. STAGE 1: BROAD RETRIEVAL (HYBRID + RRF)
+  let candidateDocs: Document[] = [];
   try {
-    searchResults = await vectorStore.similaritySearchWithScore(searchQuery, 15);
+    candidateDocs = await hybridSearch(searchQuery, docId, { topK: 15 });
   } catch (error) {
-    console.warn("similaritySearchWithScore failed:", error);
+    console.warn("hybridSearch failed:", error);
   }
 
-  // Handle empty results early
-  if (!searchResults?.length) {
+  if (!candidateDocs.length) {
+    try {
+      const vectorStore = await getVectorStoreForDoc(docId);
+      const denseResults = await vectorStore.similaritySearchWithScore(searchQuery, 15);
+      candidateDocs = denseResults.map(([doc]) => doc);
+    } catch (error) {
+      console.warn("similaritySearchWithScore failed:", error);
+    }
+  }
+
+  if (!candidateDocs.length) {
     return {
       answer: "I couldn't read any text from this PDF. Try another file or enable OCR.",
       sourceDocuments: [],
@@ -62,7 +71,7 @@ export async function answerQuestionAboutDocument(
   let docs: Document[] = [];
   try {
     // Extract just the plain text for the reranker model
-    const docStrings = searchResults.map(([doc]) => doc.pageContent);
+    const docStrings = candidateDocs.map((doc) => doc.pageContent);
 
     // Call Pinecone's native bge-reranker model
     const rerankResponse = await pinecone.inference.rerank(
@@ -78,13 +87,13 @@ export async function answerQuestionAboutDocument(
     // Map the results back to the original LangChain Document objects using the returned indexes
     if (rerankResponse.data) {
       docs = rerankResponse.data.map((item) => {
-        const originalDoc = searchResults[item.index][0];
+        const originalDoc = candidateDocs[item.index];
         
         // 🔹 Server-side console logging for the reranked output
         console.log(`\n--- Retrieved Chunk (Reranked) ---`);
         console.log(`Vector ID:    ${originalDoc.id || "N/A"}`);
         console.log(`Rerank Score: ${item.score.toFixed(4)}`);
-        console.log(`Chunk Index:  ${originalDoc.metadata.chunkIndex}`);
+        console.log(`Chunk Index:  ${originalDoc.metadata?.chunkIndex ?? "N/A"}`);
 
         return originalDoc;
       });
@@ -96,11 +105,11 @@ export async function answerQuestionAboutDocument(
     console.warn("⚠️ Reranking failed, falling back to base vector search:", error);
     
     // Fallback: If the inference API is down, just take the top 5 from the original search
-    docs = searchResults.slice(0, 5).map(([doc, score], index) => {
+    docs = candidateDocs.slice(0, 5).map((doc, index) => {
       console.log(`\n--- Retrieved Chunk ${index + 1} (Fallback) ---`);
       console.log(`Vector ID:   ${doc.id || "N/A"}`);
-      console.log(`Base Score:  ${score.toFixed(4)}`);
-      console.log(`Chunk Index: ${doc.metadata.chunkIndex}`);
+      console.log("Base Score:  N/A (RRF order)");
+      console.log(`Chunk Index: ${doc.metadata?.chunkIndex ?? "N/A"}`);
       return doc;
     });
   }

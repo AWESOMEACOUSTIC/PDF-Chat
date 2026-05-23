@@ -5,8 +5,14 @@ import { PineconeStore } from "@langchain/pinecone";
 import pinecone from "../config/pinecone";
 import { embeddings } from "./embeddings";
 import { generateDocs } from "./documentLoader";
+import {
+  DENSE_INDEX_NAME,
+  SPARSE_INDEX_NAME,
+  upsertHybridVectors,
+} from "./hybridSearch";
 
-export const indexName = "pdf-chat";
+export const indexName = DENSE_INDEX_NAME;
+export const sparseIndexName = SPARSE_INDEX_NAME;
 
 async function namespaceExists(index: Index<RecordMetadata>, namespace: string) {
   const stats = await index.describeIndexStats();
@@ -28,11 +34,22 @@ export async function generateEmbeddingsInPineconeVectorStore(
   gridFsId: string,
   docId: string
 ): Promise<PineconeStore> {
-  const index = pinecone.Index(indexName);
+  const denseIndex = pinecone.Index(indexName);
+  const sparseIndex = pinecone.Index(sparseIndexName);
 
-  if (await namespaceExists(index, docId)) {
+  const denseExists = await namespaceExists(denseIndex, docId);
+  let sparseExists = false;
+  let sparseAvailable = true;
+  try {
+    sparseExists = await namespaceExists(sparseIndex, docId);
+  } catch (error) {
+    sparseAvailable = false;
+    console.warn("Sparse index check failed; continuing dense-only:", error);
+  }
+
+  if (denseExists && (sparseExists || !sparseAvailable)) {
     return PineconeStore.fromExistingIndex(embeddings, {
-      pineconeIndex: index,
+      pineconeIndex: denseIndex,
       namespace: docId,
     });
   }
@@ -47,21 +64,13 @@ export async function generateEmbeddingsInPineconeVectorStore(
     throw new Error(`Embeddings failed (likely quota): ${error?.message || error}`);
   }
 
-  const store = await PineconeStore.fromDocuments(docs, embeddings, {
-    pineconeIndex: index,
-    namespace: docId,
+  await upsertHybridVectors(docs, docId, {
+    includeDense: !denseExists,
+    includeSparse: sparseAvailable && !sparseExists,
   });
 
-  try {
-    const stats = await index.describeIndexStats();
-    const count =
-      (stats as any).namespaces?.[docId]?.recordCount ??
-      (stats as any).namespaces?.[docId]?.vectorCount ??
-      0;
-    console.log(`Stored vectors in '${docId}': ${count}`);
-  } catch (error) {
-    console.warn("describeIndexStats verify failed:", error);
-  }
-
-  return store;
+  return PineconeStore.fromExistingIndex(embeddings, {
+    pineconeIndex: denseIndex,
+    namespace: docId,
+  });
 }
