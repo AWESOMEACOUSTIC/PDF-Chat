@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChatMessage, ChatResponse } from "@/types/chat";
+import { ChatHistoryResponse, ChatMessage, ChatResponse } from "@/types/chat";
 
 interface UseChatProps {
   fileId: string;
@@ -12,13 +12,58 @@ export function useChat({ fileId }: UseChatProps) {
   const [inputMessage, setInputMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  const initializeChat = (fileName: string) => {
-    setMessages([{
-      id: '1',
-      type: 'ai',
-      content: `Hello! I'm ready to help you analyze "${fileName}". Ask me anything about this document!`,
-      timestamp: new Date()
-    }]);
+  const buildWelcomeMessage = (fileName: string): ChatMessage[] => ([{
+    id: "welcome-message",
+    type: "ai",
+    content: `Hello! I'm ready to help you analyze "${fileName}". Ask me anything about this document!`,
+    timestamp: new Date()
+  }]);
+
+  const mapHistoryToMessages = (history: ChatHistoryResponse["history"]) => {
+    const mapped: ChatMessage[] = [];
+
+    history.forEach((chat) => {
+      const timestamp = new Date(chat.timestamp);
+      mapped.push({
+        id: `${chat.id}-user`,
+        type: "user",
+        content: chat.message,
+        timestamp
+      });
+      mapped.push({
+        id: `${chat.id}-ai`,
+        type: "ai",
+        content: chat.response,
+        timestamp
+      });
+    });
+
+    return mapped;
+  };
+
+  const initializeChat = async (fileName: string) => {
+    try {
+      const response = await fetch(`/api/chat/${fileId}/history?userId=demo-user`, {
+        method: "GET"
+      });
+
+      if (!response.ok) {
+        setMessages(buildWelcomeMessage(fileName));
+        return;
+      }
+
+      const data: ChatHistoryResponse = await response.json();
+
+      if (data.success && data.history.length > 0) {
+        setMessages(mapHistoryToMessages(data.history));
+        return;
+      }
+
+      setMessages(buildWelcomeMessage(fileName));
+    } catch (error) {
+      console.error("Error loading chat history:", error);
+      setMessages(buildWelcomeMessage(fileName));
+    }
   };
 
   const sendMessage = async (message: string): Promise<void> => {
@@ -50,11 +95,16 @@ export function useChat({ fileId }: UseChatProps) {
       const data: ChatResponse = await response.json();
 
       if (data.success) {
+        if (data.chatHistory && data.chatHistory.length > 0) {
+          setMessages(mapHistoryToMessages(data.chatHistory));
+          return;
+        }
+
         const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
+          id: data.chat?.id ? `${data.chat.id}-ai` : (Date.now() + 1).toString(),
           type: 'ai',
           content: data.response,
-          timestamp: new Date()
+          timestamp: data.chat?.timestamp ? new Date(data.chat.timestamp) : new Date()
         };
         setMessages(prev => [...prev, aiMessage]);
       } else {

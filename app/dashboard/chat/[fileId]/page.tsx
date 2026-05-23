@@ -33,7 +33,7 @@ export default function DocumentChatPage() {
   // Initialize chat when document loads
   useEffect(() => {
     if (document) {
-      initializeChat(document.fileName);
+      void initializeChat(document.fileName);
     }
   }, [document]);
 
