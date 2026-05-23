@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/config/mongodb";
-import { DocumentModel } from "@/lib/models";
+import { ChatMessageModel, DocumentModel } from "@/lib/models";
 import { 
   generateEmbeddingsInPineconeVectorStore, 
   answerQuestionAboutDocument 
@@ -13,7 +13,12 @@ export async function POST(
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
-    const { message, userId = "demo-user" } = await req.json();
+    const {
+      message,
+      userId = "demo-user",
+      includeHistory = false,
+      historyLimit
+    } = await req.json();
     const { fileId } = await params;
 
     if (!message || !fileId) {
@@ -26,16 +31,22 @@ export async function POST(
     // Connect to database
     await connectToDatabase();
 
-    // Find the document
+    // Find the document and validate ownership
     const document = await DocumentModel.findOne({
-      clientFileId: fileId,
-      userId
+      clientFileId: fileId
     });
 
     if (!document) {
       return NextResponse.json(
         { error: "Document not found" },
         { status: 404 }
+      );
+    }
+
+    if (document.userId !== userId) {
+      return NextResponse.json(
+        { error: "Unauthorized access to document" },
+        { status: 403 }
       );
     }
 
@@ -76,9 +87,59 @@ export async function POST(
         aiResponse = result.answer;
       }
 
+      let savedChat = null;
+
+      try {
+        savedChat = await ChatMessageModel.create({
+          documentId: docId,
+          userId,
+          message,
+          response: aiResponse,
+          timestamp: new Date()
+        });
+      } catch (saveError) {
+        console.error("Failed to persist chat message:", saveError);
+      }
+
+      let chatHistory;
+      const resolvedHistoryLimit =
+        typeof historyLimit === "number" && Number.isFinite(historyLimit) && historyLimit > 0
+          ? Math.floor(historyLimit)
+          : undefined;
+
+      if (includeHistory || resolvedHistoryLimit) {
+        try {
+          let historyQuery = ChatMessageModel.find({ documentId: docId, userId })
+            .sort({ timestamp: 1 });
+
+          if (resolvedHistoryLimit) {
+            historyQuery = historyQuery.limit(resolvedHistoryLimit);
+          }
+
+          const historyDocs = await historyQuery;
+          chatHistory = historyDocs.map(chat => ({
+            id: chat._id.toString(),
+            message: chat.message,
+            response: chat.response,
+            timestamp: chat.timestamp
+          }));
+        } catch (historyError) {
+          console.error("Failed to fetch chat history:", historyError);
+        }
+      }
+
       return NextResponse.json({
         success: true,
         response: aiResponse,
+        chat: savedChat
+          ? {
+              id: savedChat._id.toString(),
+              message: savedChat.message,
+              response: savedChat.response,
+              timestamp: savedChat.timestamp
+            }
+          : null,
+        chatHistory,
         documentInfo: {
           fileName: document.fileName,
           fileSize: document.fileSize,
@@ -106,9 +167,31 @@ Document Info:
 
 Your question: "${message}"`;
 
+      let savedChat = null;
+
+      try {
+        savedChat = await ChatMessageModel.create({
+          documentId: docId,
+          userId,
+          message,
+          response: fallbackResponse,
+          timestamp: new Date()
+        });
+      } catch (saveError) {
+        console.error("Failed to persist fallback chat message:", saveError);
+      }
+
       return NextResponse.json({
         success: true,
         response: fallbackResponse,
+        chat: savedChat
+          ? {
+              id: savedChat._id.toString(),
+              message: savedChat.message,
+              response: savedChat.response,
+              timestamp: savedChat.timestamp
+            }
+          : null,
         documentInfo: {
           fileName: document.fileName,
           fileSize: document.fileSize,
