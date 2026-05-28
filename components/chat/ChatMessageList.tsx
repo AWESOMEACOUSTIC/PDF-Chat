@@ -1,15 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-
-interface ChatMessage {
-  id: string;
-  type: 'user' | 'ai';
-  content: string;
-  timestamp: Date;
-}
+import type { ChatMessage, Citation } from "@/types/chat";
+import CitationDrawer from "@/components/chat/CitationDrawer";
 
 interface ChatMessageListProps {
   messages: ChatMessage[];
@@ -107,6 +103,15 @@ export default function ChatMessageList({ messages, sendingMessage }: ChatMessag
     });
   };
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
+
+  const openCitations = (citations?: Citation[]) => {
+    if (!citations?.length) return;
+    setActiveCitations(citations);
+    setDrawerOpen(true);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-4">
       {messages.map((message) => (
@@ -128,13 +133,31 @@ export default function ChatMessageList({ messages, sendingMessage }: ChatMessag
                 {message.content}
               </p>
             )}
-            <p
-              className={`text-xs mt-2 ${
-                message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
-              }`}
-            >
-              {formatDate(message.timestamp)}
-            </p>
+            {(() => {
+              const hasCitations = message.type === "ai" && (message.citations?.length ?? 0) > 0;
+              const timestampClass =
+                message.type === "user" ? "text-blue-100" : "text-gray-500";
+              return (
+                <div
+                  className={`mt-2 flex items-center text-xs ${
+                    message.type === "user" || !hasCitations
+                      ? "justify-end"
+                      : "justify-between"
+                  }`}
+                >
+                  <span className={timestampClass}>{formatDate(message.timestamp)}</span>
+                  {hasCitations ? (
+                    <button
+                      type="button"
+                      onClick={() => openCitations(message.citations)}
+                      className="rounded-full border border-gray-200/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:text-gray-800"
+                    >
+                      Citation
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })()}
           </div>
         </div>
       ))}
@@ -149,6 +172,12 @@ export default function ChatMessageList({ messages, sendingMessage }: ChatMessag
           </div>
         </div>
       )}
+
+      <CitationDrawer
+        open={drawerOpen}
+        citations={activeCitations}
+        onClose={() => setDrawerOpen(false)}
+      />
     </div>
   );
 }

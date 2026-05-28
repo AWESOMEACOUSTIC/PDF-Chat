@@ -64,6 +64,7 @@ export async function GET(
       id: chat._id.toString(),
       message: chat.message,
       response: chat.response,
+      citations: chat.citations ?? [],
       timestamp: chat.timestamp
     }));
 

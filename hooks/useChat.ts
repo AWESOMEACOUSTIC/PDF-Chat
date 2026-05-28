@@ -34,6 +34,7 @@ export function useChat({ fileId }: UseChatProps) {
         id: `${chat.id}-ai`,
         type: "ai",
         content: chat.response,
+        citations: chat.citations ?? [],
         timestamp
       });
     });
@@ -100,10 +101,14 @@ export function useChat({ fileId }: UseChatProps) {
           return;
         }
 
+        const answer = data.answer ?? data.response ?? "";
+        const citations = data.citations ?? data.chat?.citations ?? [];
+
         const aiMessage: ChatMessage = {
           id: data.chat?.id ? `${data.chat.id}-ai` : (Date.now() + 1).toString(),
           type: 'ai',
-          content: data.response,
+          content: answer,
+          citations,
           timestamp: data.chat?.timestamp ? new Date(data.chat.timestamp) : new Date()
         };
         setMessages(prev => [...prev, aiMessage]);

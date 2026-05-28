@@ -15,6 +15,14 @@ export interface IDocument extends Document {
   };
 }
 
+export interface ICitation {
+  documentName: string;
+  pageNumber: number;
+  chunkId: string;
+  chunkText: string;
+  sectionTitle?: string;
+}
+
 const DocumentSchema: Schema = new Schema({
   clientFileId: { type: String, required: true, index: true, unique: true },
   userId: { type: String, required: true, index: true },
@@ -37,8 +45,20 @@ export interface IChatMessage extends Document {
   userId: string;
   message: string;
   response: string;
+  citations?: ICitation[];
   timestamp: Date;
 }
+
+const CitationSchema = new Schema(
+  {
+    documentName: { type: String, required: true },
+    pageNumber: { type: Number, required: true },
+    chunkId: { type: String, required: true },
+    chunkText: { type: String, required: true },
+    sectionTitle: { type: String },
+  },
+  { _id: false }
+);
 
 // Chat Message Schema
 const ChatMessageSchema: Schema = new Schema({
@@ -46,6 +66,7 @@ const ChatMessageSchema: Schema = new Schema({
   userId: { type: String, required: true, index: true },
   message: { type: String, required: true },
   response: { type: String, required: true },
+  citations: { type: [CitationSchema], default: [] },
   timestamp: { type: Date, default: Date.now },
 });
 

@@ -5,6 +5,7 @@ import {
   generateEmbeddingsInPineconeVectorStore, 
   answerQuestionAboutDocument 
 } from "@/lib/langchain";
+import type { Citation } from "@/lib/langchain";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,7 @@ export async function POST(
     try {
       // Check if embeddings exist for this document, if not create them
       let aiResponse: string;
+      let citations: Citation[] = [];
       
       console.log(`Processing chat for document: ${docId}, gridFsId: ${gridFsId}`);
       
@@ -64,6 +66,7 @@ export async function POST(
         console.log(`Attempting to answer question: "${message}"`);
         const result = await answerQuestionAboutDocument(gridFsId, docId, message);
         aiResponse = result.answer;
+        citations = result.citations;
         console.log(`AI Response received: ${aiResponse.substring(0, 100)}...`);
         
         // If the answer indicates no information found, it might be the first query
@@ -85,6 +88,7 @@ export async function POST(
         // Try answering again
         const result = await answerQuestionAboutDocument(gridFsId, docId, message);
         aiResponse = result.answer;
+        citations = result.citations;
       }
 
       let savedChat = null;
@@ -95,6 +99,7 @@ export async function POST(
           userId,
           message,
           response: aiResponse,
+          citations,
           timestamp: new Date()
         });
       } catch (saveError) {
@@ -121,6 +126,7 @@ export async function POST(
             id: chat._id.toString(),
             message: chat.message,
             response: chat.response,
+            citations: chat.citations ?? [],
             timestamp: chat.timestamp
           }));
         } catch (historyError) {
@@ -130,12 +136,15 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
+        answer: aiResponse,
+        citations,
         response: aiResponse,
         chat: savedChat
           ? {
               id: savedChat._id.toString(),
               message: savedChat.message,
               response: savedChat.response,
+              citations: savedChat.citations ?? [],
               timestamp: savedChat.timestamp
             }
           : null,
@@ -175,6 +184,7 @@ Your question: "${message}"`;
           userId,
           message,
           response: fallbackResponse,
+          citations: [],
           timestamp: new Date()
         });
       } catch (saveError) {
@@ -183,12 +193,15 @@ Your question: "${message}"`;
 
       return NextResponse.json({
         success: true,
+        answer: fallbackResponse,
+        citations: [],
         response: fallbackResponse,
         chat: savedChat
           ? {
               id: savedChat._id.toString(),
               message: savedChat.message,
               response: savedChat.response,
+              citations: savedChat.citations ?? [],
               timestamp: savedChat.timestamp
             }
           : null,

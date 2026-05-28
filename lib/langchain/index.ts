@@ -15,7 +15,64 @@ import {
   indexName,
 } from "./vectorStore";
 
+export type Citation = {
+  documentName: string;
+  pageNumber: number;
+  chunkId: string;
+  chunkText: string;
+  sectionTitle?: string;
+};
+
 export { generateEmbeddingsInPineconeVectorStore, indexName };
+
+const asNonEmptyString = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const asFiniteNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+};
+
+const extractPageNumber = (metadata: Record<string, unknown>) => {
+  const direct = asFiniteNumber(metadata.pageNumber ?? metadata.page);
+  if (direct !== null) return direct;
+  const loc = metadata.loc as { pageNumber?: unknown; page?: unknown } | undefined;
+  const fromLoc = loc ? asFiniteNumber(loc.pageNumber ?? loc.page) : null;
+  return fromLoc ?? 0;
+};
+
+const buildCitationForDoc = (doc: Document, docId: string): Citation => {
+  const metadata = (doc.metadata ?? {}) as Record<string, unknown>;
+  const documentName =
+    asNonEmptyString(metadata.fileName) ??
+    asNonEmptyString(metadata.documentName) ??
+    "Unknown document";
+  const sectionTitle =
+    asNonEmptyString(metadata.sectionTitle) ??
+    asNonEmptyString(metadata.heading) ??
+    undefined;
+  const chunkId =
+    asNonEmptyString(doc.id) ??
+    (metadata.chunkIndex !== undefined ? `${docId}-chunk-${metadata.chunkIndex}` : `${docId}-chunk-unknown`);
+
+  return {
+    documentName,
+    pageNumber: extractPageNumber(metadata),
+    chunkId,
+    chunkText: doc.pageContent,
+    sectionTitle,
+  };
+};
+
+const buildCitations = (docs: Document[], docId: string) =>
+  docs.map((doc) => buildCitationForDoc(doc, docId));
 
 export async function createDocumentQAChain(docId: string) {
   const vectorStore = await getVectorStoreForDoc(docId);
@@ -63,6 +120,7 @@ export async function answerQuestionAboutDocument(
     return {
       answer: "I couldn't read any text from this PDF. Try another file or enable OCR.",
       sourceDocuments: [],
+      citations: [],
     };
   }
 
@@ -114,6 +172,8 @@ export async function answerQuestionAboutDocument(
     });
   }
 
+  const citations = buildCitations(docs, docId);
+
   // 5. Run the LLM Chains
   const runChain = async () => {
     const llm = getChatModel();
@@ -131,14 +191,14 @@ export async function answerQuestionAboutDocument(
 
   try {
     const answer = await runChain();
-    return { answer, sourceDocuments: docs };
+    return { answer, sourceDocuments: docs, citations };
   } catch (error: any) {
     const msg = error?.message || "";
     if (/invalid model/i.test(msg)) {
       console.warn(`Primary Model invalid; retrying with ${FALLBACK_LLM}`);
       useFallbackModel();
       const answer = await runChain();
-      return { answer, sourceDocuments: docs };
+      return { answer, sourceDocuments: docs, citations };
     }
     throw error;
   }

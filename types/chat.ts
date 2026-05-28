@@ -1,8 +1,17 @@
 // Chat Message Types
+export interface Citation {
+  documentName: string;
+  pageNumber: number;
+  chunkId: string;
+  chunkText: string;
+  sectionTitle?: string;
+}
+
 export interface ChatMessage {
   id: string;
   type: 'user' | 'ai';
   content: string;
+  citations?: Citation[];
   timestamp: Date;
 }
 
@@ -20,13 +29,16 @@ export interface Document {
 }
 
 // API Response Types
-export interface ChatResponse {
-  success: boolean;
-  response: string;
+export interface ChatSuccessResponse {
+  success: true;
+  answer: string;
+  citations: Citation[];
+  response?: string;
   chat?: {
     id: string;
     message: string;
     response: string;
+    citations?: Citation[];
     timestamp: string;
   } | null;
   chatHistory?: ChatHistoryItem[];
@@ -36,13 +48,21 @@ export interface ChatResponse {
     uploadedAt: string;
     gridFsId: string;
   };
-  error?: string;
 }
+
+export interface ChatErrorResponse {
+  success: false;
+  error: string;
+  details?: string;
+}
+
+export type ChatResponse = ChatSuccessResponse | ChatErrorResponse;
 
 export interface ChatHistoryItem {
   id: string;
   message: string;
   response: string;
+  citations?: Citation[];
   timestamp: string;
 }
 
