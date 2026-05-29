@@ -6,11 +6,17 @@ import {
   answerQuestionAboutDocument 
 } from "@/lib/langchain";
 import type { Citation } from "@/lib/langchain";
+import { validateUserQuery } from "@/lib/langchain/trustVaildator";
+import { isLockedOut, recordViolation } from "@/lib/langchain/lockout";
 import { purgeBlockedDocument } from "@/lib/securityCleanup";
 
 export const runtime = "nodejs";
 
 const SECURITY_VIOLATION_CODE = "SECURITY_VIOLATION";
+const SECURITY_LOCKOUT_MESSAGE =
+  "SECURITY_VIOLATION: You are temporarily locked out.";
+const SECURITY_VIOLATION_MESSAGE =
+  "SECURITY_VIOLATION: Your message violated our usage policy. This incident has been logged.";
 const isSecurityViolationError = (error: unknown) =>
   error instanceof Error && error.message.startsWith(SECURITY_VIOLATION_CODE);
 
@@ -23,16 +29,39 @@ export async function POST(
   try {
     const {
       message,
-      userId = "demo-user",
+      question,
+      userId,
       includeHistory = false,
       historyLimit
     } = await req.json();
     const { fileId } = await params;
 
-    if (!message || !fileId) {
+    const resolvedUserId =
+      typeof userId === "string" && userId.trim().length > 0
+        ? userId.trim()
+        : "demo-user";
+    const resolvedMessage =
+      typeof message === "string"
+        ? message.trim()
+        : typeof question === "string"
+        ? question.trim()
+        : "";
+
+    if (!resolvedMessage || !fileId) {
       return NextResponse.json(
         { error: "Message and fileId are required" },
         { status: 400 }
+      );
+    }
+
+    if (isLockedOut(resolvedUserId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: SECURITY_LOCKOUT_MESSAGE,
+          code: SECURITY_VIOLATION_CODE,
+        },
+        { status: 403 }
       );
     }
 
@@ -51,9 +80,22 @@ export async function POST(
       );
     }
 
-    if (document.userId !== userId) {
+    if (document.userId !== resolvedUserId) {
       return NextResponse.json(
         { error: "Unauthorized access to document" },
+        { status: 403 }
+      );
+    }
+
+    const verdict = await validateUserQuery(resolvedMessage);
+    if (!verdict.isSafe) {
+      recordViolation(resolvedUserId, verdict.reason);
+      return NextResponse.json(
+        {
+          success: false,
+          error: SECURITY_VIOLATION_MESSAGE,
+          code: SECURITY_VIOLATION_CODE,
+        },
         { status: 403 }
       );
     }
@@ -70,8 +112,8 @@ export async function POST(
       
       try {
         // Try to answer the question using existing embeddings
-        console.log(`Attempting to answer question: "${message}"`);
-        const result = await answerQuestionAboutDocument(gridFsId, docId, message);
+        console.log(`Attempting to answer question: "${resolvedMessage}"`);
+        const result = await answerQuestionAboutDocument(gridFsId, docId, resolvedMessage);
         aiResponse = result.answer;
         citations = result.citations;
         console.log(`AI Response received: ${aiResponse.substring(0, 100)}...`);
@@ -93,7 +135,7 @@ export async function POST(
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Try answering again
-        const result = await answerQuestionAboutDocument(gridFsId, docId, message);
+        const result = await answerQuestionAboutDocument(gridFsId, docId, resolvedMessage);
         aiResponse = result.answer;
         citations = result.citations;
       }
@@ -103,8 +145,8 @@ export async function POST(
       try {
         savedChat = await ChatMessageModel.create({
           documentId: docId,
-          userId,
-          message,
+          userId: resolvedUserId,
+          message: resolvedMessage,
           response: aiResponse,
           citations,
           timestamp: new Date()
@@ -121,7 +163,7 @@ export async function POST(
 
       if (includeHistory || resolvedHistoryLimit) {
         try {
-          let historyQuery = ChatMessageModel.find({ documentId: docId, userId })
+          let historyQuery = ChatMessageModel.find({ documentId: docId, userId: resolvedUserId })
             .sort({ timestamp: 1 });
 
           if (resolvedHistoryLimit) {
@@ -204,15 +246,15 @@ Document Info:
 • Size: ${(document.fileSize / 1024 / 1024).toFixed(2)} MB
 • Uploaded: ${document.uploadedAt.toLocaleDateString()}
 
-Your question: "${message}"`;
+Your question: "${resolvedMessage}"`;
 
       let savedChat = null;
 
       try {
         savedChat = await ChatMessageModel.create({
           documentId: docId,
-          userId,
-          message,
+          userId: resolvedUserId,
+          message: resolvedMessage,
           response: fallbackResponse,
           citations: [],
           timestamp: new Date()

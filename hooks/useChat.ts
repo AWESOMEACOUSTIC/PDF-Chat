@@ -5,9 +5,11 @@ import { ChatHistoryResponse, ChatMessage, ChatResponse } from "@/types/chat";
 
 interface UseChatProps {
   fileId: string;
+  docId?: string;
+  gridFsId?: string;
 }
 
-export function useChat({ fileId }: UseChatProps) {
+export function useChat({ fileId, docId, gridFsId }: UseChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
@@ -142,7 +144,9 @@ export function useChat({ fileId }: UseChatProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: userMessage.content,
+          question: userMessage.content,
+          docId,
+          gridFsId,
           userId: 'demo-user'
         })
       });

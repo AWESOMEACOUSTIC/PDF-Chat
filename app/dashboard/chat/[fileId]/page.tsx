@@ -29,7 +29,7 @@ export default function DocumentChatPage() {
     initializeChat,
     handleSendMessage,
     handleKeyPress
-  } = useChat({ fileId });
+  } = useChat({ fileId, docId: document?.id, gridFsId: document?.gridFsId });
 
   // Initialize chat when document loads
   useEffect(() => {
