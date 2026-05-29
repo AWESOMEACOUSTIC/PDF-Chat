@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/config/mongodb";
 import { DocumentModel } from "@/lib/models";
 import { generateEmbeddingsInPineconeVectorStore } from "@/lib/langchain";
+import { purgeBlockedDocument } from "@/lib/securityCleanup";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ const isSecurityViolationError = (error: unknown) =>
   error instanceof Error && error.message.startsWith(SECURITY_VIOLATION_CODE);
 
 export async function POST(req: NextRequest) {
+  let document: any = null;
+
   try {
     const { fileId, userId = "demo-user" } = await req.json();
 
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
 
     // Find the document
-    const document = await DocumentModel.findOne({
+    document = await DocumentModel.findOne({
       clientFileId: fileId,
       userId
     });
@@ -69,6 +72,17 @@ export async function POST(req: NextRequest) {
     console.error("Embeddings generation error:", error);
 
     if (isSecurityViolationError(error)) {
+      if (document) {
+        try {
+          await purgeBlockedDocument({
+            documentId: document._id.toString(),
+            gridFsId: document.metadata?.gridFsId,
+          });
+        } catch (cleanupError) {
+          console.warn("Failed to purge blocked document:", cleanupError);
+        }
+      }
+
       return NextResponse.json(
         {
           success: false,

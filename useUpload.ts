@@ -20,6 +20,7 @@ function useUpload() {
   const [progress, setProgress] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>(StatusText.IDLE);
   const [fileId, setFileId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uploadedFileInfo, setUploadedFileInfo] = useState<{
     fileId: string;
     documentId: string;
@@ -28,6 +29,7 @@ function useUpload() {
   } | null>(null);
   const [redirectTimer, setRedirectTimer] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter(); // used to redirect the user
+  const SECURITY_VIOLATION_CODE = "SECURITY_VIOLATION";
 
   const cancelRedirect = () => {
     if (redirectTimer) {
@@ -37,6 +39,7 @@ function useUpload() {
     setStatus(StatusText.IDLE);
     setFileId(null);
     setProgress(null); // Reset progress when canceling
+    setErrorMessage(null);
     setUploadedFileInfo(null); // Reset uploaded file info
   };
 
@@ -76,6 +79,8 @@ function useUpload() {
     const fileIdToUploadTo = uuidv4();
     console.log("Generated file ID:", fileIdToUploadTo);
     setFileId(fileIdToUploadTo);
+
+    setErrorMessage(null);
 
     setStatus(StatusText.UPLOADING);
     setProgress(0); // Initialize progress
@@ -164,14 +169,33 @@ function useUpload() {
               userId: 'demo-user'
             })
           });
-          
+
+          let embeddingsData: any = null;
+          try {
+            embeddingsData = await embeddingsResponse.json();
+          } catch (parseError) {
+            embeddingsData = null;
+          }
+
           if (embeddingsResponse.ok) {
-            const embeddingsData = await embeddingsResponse.json();
             console.log('✅ Embeddings generated successfully:', embeddingsData);
             setStatus(StatusText.SUCCESS);
           } else {
-            const embeddingsError = await embeddingsResponse.json();
-            console.error('❌ Embeddings generation failed:', embeddingsError);
+            const errorCode = typeof embeddingsData?.code === "string" ? embeddingsData.code : null;
+            const errorText = typeof embeddingsData?.error === "string" ? embeddingsData.error : null;
+            const isSecurityViolation = embeddingsResponse.status === 403 && (
+              errorCode === SECURITY_VIOLATION_CODE ||
+              (errorText ? errorText.startsWith(SECURITY_VIOLATION_CODE) : false)
+            );
+
+            if (isSecurityViolation) {
+              setErrorMessage("Upload blocked by security validation (SECURITY_VIOLATION).");
+              setStatus(StatusText.ERROR);
+              setProgress(null);
+              return;
+            }
+
+            console.error('❌ Embeddings generation failed:', embeddingsData);
             // Still show success for upload, but log the embeddings error
             setStatus(StatusText.SUCCESS);
           }
@@ -187,20 +211,45 @@ function useUpload() {
         }, 5000);
         setRedirectTimer(timer);
       } else {
-        const errorData = await response.json();
+        let errorData: any = null;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          errorData = null;
+        }
         console.error('Upload failed with status:', response.status);
         console.error('Error data:', errorData);
+        const errorCode = typeof errorData?.code === "string" ? errorData.code : null;
+        const errorText = typeof errorData?.message === "string" ? errorData.message : null;
+        if (
+          response.status === 403 &&
+          (errorCode === SECURITY_VIOLATION_CODE ||
+            (errorText ? errorText.startsWith(SECURITY_VIOLATION_CODE) : false))
+        ) {
+          setErrorMessage("Upload blocked by security validation (SECURITY_VIOLATION).");
+        } else {
+          setErrorMessage(errorText || "Upload failed. Please try again.");
+        }
         setStatus(StatusText.ERROR);
         setProgress(null); // Reset progress on error
       }
     } catch (error) {
       console.error('Upload error (network/parse):', error);
+      setErrorMessage("Upload failed. Please try again.");
       setStatus(StatusText.ERROR);
       setProgress(null); // Reset progress on error
     }
   };
 
-  return { progress, status, fileId, uploadedFileInfo, handleUpload, cancelRedirect };
+  return {
+    progress,
+    status,
+    fileId,
+    uploadedFileInfo,
+    errorMessage,
+    handleUpload,
+    cancelRedirect
+  };
 }
 
 export default useUpload

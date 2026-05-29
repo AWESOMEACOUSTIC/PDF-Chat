@@ -12,6 +12,7 @@ const FileUploader = () => {
     status,
     fileId,
     uploadedFileInfo,
+        errorMessage,
     handleUpload,
     cancelRedirect
   } = useUpload();  // to get the upload status
@@ -146,8 +147,10 @@ const FileUploader = () => {
                         ) : status === StatusText.ERROR ? (
                             <>
                                 <CircleArrowDown className='h-16 w-16 text-red-600' />
-                                <p className='text-red-600 text-lg font-semibold'>Upload failed. Please try again.</p>
-                                <p className='text-sm text-gray-600 mt-2'>Check your internet connection and try again</p>
+                                <p className='text-red-600 text-lg font-semibold'>Upload failed.</p>
+                                <p className='text-sm text-gray-600 mt-2'>
+                                    {errorMessage || 'Check your internet connection and try again.'}
+                                </p>
                             </>
                         ) : isDragActive ? (
                             <>

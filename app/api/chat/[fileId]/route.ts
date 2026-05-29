@@ -6,6 +6,7 @@ import {
   answerQuestionAboutDocument 
 } from "@/lib/langchain";
 import type { Citation } from "@/lib/langchain";
+import { purgeBlockedDocument } from "@/lib/securityCleanup";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
 ) {
+  let document: any = null;
+
   try {
     const {
       message,
@@ -37,7 +40,7 @@ export async function POST(
     await connectToDatabase();
 
     // Find the document and validate ownership
-    const document = await DocumentModel.findOne({
+    document = await DocumentModel.findOne({
       clientFileId: fileId
     });
 
@@ -165,6 +168,17 @@ export async function POST(
       console.error("AI processing error:", aiError);
 
       if (isSecurityViolationError(aiError)) {
+        if (document) {
+          try {
+            await purgeBlockedDocument({
+              documentId: document._id.toString(),
+              gridFsId: document.metadata?.gridFsId,
+            });
+          } catch (cleanupError) {
+            console.warn("Failed to purge blocked document:", cleanupError);
+          }
+        }
+
         const message = aiError instanceof Error ? aiError.message : "Security violation";
         return NextResponse.json(
           {
