@@ -1,3 +1,5 @@
+// npx tsx --conditions=react-server test-runner.ts --legacy-peer-deps
+
 import dotenv from "dotenv";
 
 const TEST_GRIDFS_ID = "6a114bd75e669cd8412ea71e"; 

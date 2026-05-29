@@ -114,53 +114,58 @@ export default function ChatMessageList({ messages, sendingMessage }: ChatMessag
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-4">
-      {messages.map((message) => (
-        <div
-          key={message.id}
-          className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-        >
-          <div
-            className={`max-w-[70%] rounded-lg px-4 py-3 ${
-              message.type === 'user'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-800'
-            }`}
-          >
-            {message.type === "ai" ? (
-              <MarkdownMessage content={message.content} />
-            ) : (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+      {messages.map((message) => {
+        if (message.type === "system") {
+          return (
+            <div key={message.id} className="flex justify-center">
+              <div className="max-w-[80%] rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                 {message.content}
-              </p>
-            )}
-            {(() => {
-              const hasCitations = message.type === "ai" && (message.citations?.length ?? 0) > 0;
-              const timestampClass =
-                message.type === "user" ? "text-blue-100" : "text-gray-500";
-              return (
-                <div
-                  className={`mt-2 flex items-center text-xs ${
-                    message.type === "user" || !hasCitations
-                      ? "justify-end"
-                      : "justify-between"
-                  }`}
-                >
-                  <span className={timestampClass}>{formatDate(message.timestamp)}</span>
-                  {hasCitations ? (
-                    <button
-                      type="button"
-                      onClick={() => openCitations(message.citations)}
-                      className="rounded-full border border-gray-200/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:text-gray-800"
-                    >
-                      Citation
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })()}
+              </div>
+            </div>
+          );
+        }
+
+        const isUser = message.type === "user";
+        const hasCitations = message.type === "ai" && (message.citations?.length ?? 0) > 0;
+        const timestampClass = isUser ? "text-blue-100" : "text-gray-500";
+
+        return (
+          <div
+            key={message.id}
+            className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                isUser ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"
+              }`}
+            >
+              {message.type === "ai" ? (
+                <MarkdownMessage content={message.content} />
+              ) : (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {message.content}
+                </p>
+              )}
+              <div
+                className={`mt-2 flex items-center text-xs ${
+                  isUser || !hasCitations ? "justify-end" : "justify-between"
+                }`}
+              >
+                <span className={timestampClass}>{formatDate(message.timestamp)}</span>
+                {hasCitations ? (
+                  <button
+                    type="button"
+                    onClick={() => openCitations(message.citations)}
+                    className="rounded-full border border-gray-200/80 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:text-gray-800"
+                  >
+                    Citation
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       
       {sendingMessage && (
         <div className="flex justify-start">

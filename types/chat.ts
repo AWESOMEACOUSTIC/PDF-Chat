@@ -9,7 +9,7 @@ export interface Citation {
 
 export interface ChatMessage {
   id: string;
-  type: 'user' | 'ai';
+  type: 'user' | 'ai' | 'system';
   content: string;
   citations?: Citation[];
   timestamp: Date;
@@ -54,6 +54,7 @@ export interface ChatErrorResponse {
   success: false;
   error: string;
   details?: string;
+  code?: string;
 }
 
 export type ChatResponse = ChatSuccessResponse | ChatErrorResponse;

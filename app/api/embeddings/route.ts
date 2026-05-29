@@ -5,6 +5,10 @@ import { generateEmbeddingsInPineconeVectorStore } from "@/lib/langchain";
 
 export const runtime = "nodejs";
 
+const SECURITY_VIOLATION_CODE = "SECURITY_VIOLATION";
+const isSecurityViolationError = (error: unknown) =>
+  error instanceof Error && error.message.startsWith(SECURITY_VIOLATION_CODE);
+
 export async function POST(req: NextRequest) {
   try {
     const { fileId, userId = "demo-user" } = await req.json();
@@ -63,6 +67,18 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("Embeddings generation error:", error);
+
+    if (isSecurityViolationError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Security violation",
+          code: SECURITY_VIOLATION_CODE,
+        },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Failed to generate embeddings",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChatHistoryResponse, ChatMessage, ChatResponse } from "@/types/chat";
 
 interface UseChatProps {
@@ -11,6 +11,30 @@ export function useChat({ fileId }: UseChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [lockUntil, setLockUntil] = useState<number | null>(null);
+
+  const SECURITY_VIOLATION_CODE = "SECURITY_VIOLATION";
+  const SECURITY_WARNING_MESSAGE =
+    "You are being reported to the human resource team for using this service inappropriately";
+  const LOCK_DURATION_MS = 2 * 60 * 1000;
+
+  const isLocked = lockUntil !== null && Date.now() < lockUntil;
+
+  useEffect(() => {
+    if (lockUntil === null) return;
+
+    const remainingMs = lockUntil - Date.now();
+    if (remainingMs <= 0) {
+      setLockUntil(null);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setLockUntil(null);
+    }, remainingMs);
+
+    return () => clearTimeout(timeout);
+  }, [lockUntil]);
 
   const buildWelcomeMessage = (fileName: string): ChatMessage[] => ([{
     id: "welcome-message",
@@ -67,8 +91,38 @@ export function useChat({ fileId }: UseChatProps) {
     }
   };
 
+  const triggerSecurityLockdown = () => {
+    const now = Date.now();
+    setLockUntil(now + LOCK_DURATION_MS);
+    setInputMessage("");
+    setMessages((prev) => {
+      const alreadyNotified = prev.some(
+        (msg) => msg.type === "system" && msg.content === SECURITY_WARNING_MESSAGE
+      );
+      if (alreadyNotified) return prev;
+      return [
+        ...prev,
+        {
+          id: `security-${now}`,
+          type: "system",
+          content: SECURITY_WARNING_MESSAGE,
+          timestamp: new Date(now),
+        },
+      ];
+    });
+  };
+
+  const isSecurityViolation = (data: ChatResponse) => {
+    if (data.success) return false;
+    const errorMessage = data.error ?? "";
+    return (
+      data.code === SECURITY_VIOLATION_CODE ||
+      errorMessage.startsWith(SECURITY_VIOLATION_CODE)
+    );
+  };
+
   const sendMessage = async (message: string): Promise<void> => {
-    if (!message.trim() || sendingMessage) return;
+    if (!message.trim() || sendingMessage || isLocked) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -95,27 +149,33 @@ export function useChat({ fileId }: UseChatProps) {
 
       const data: ChatResponse = await response.json();
 
-      if (data.success) {
-        if (data.chatHistory && data.chatHistory.length > 0) {
-          setMessages(mapHistoryToMessages(data.chatHistory));
+      if (!response.ok || !data.success) {
+        if (isSecurityViolation(data)) {
+          triggerSecurityLockdown();
           return;
         }
-
-        const answer = data.answer ?? data.response ?? "";
-        const citations = data.citations ?? data.chat?.citations ?? [];
-
-        const aiMessage: ChatMessage = {
-          id: data.chat?.id ? `${data.chat.id}-ai` : (Date.now() + 1).toString(),
-          type: 'ai',
-          content: answer,
-          citations,
-          timestamp: data.chat?.timestamp ? new Date(data.chat.timestamp) : new Date()
-        };
-        setMessages(prev => [...prev, aiMessage]);
-      } else {
-        throw new Error(data.error || 'Failed to get AI response');
+        const errorMessage = !data.success
+          ? data.error
+          : "Failed to get AI response";
+        throw new Error(errorMessage || "Failed to get AI response");
       }
 
+      if (data.chatHistory && data.chatHistory.length > 0) {
+        setMessages(mapHistoryToMessages(data.chatHistory));
+        return;
+      }
+
+      const answer = data.answer ?? data.response ?? "";
+      const citations = data.citations ?? data.chat?.citations ?? [];
+
+      const aiMessage: ChatMessage = {
+        id: data.chat?.id ? `${data.chat.id}-ai` : (Date.now() + 1).toString(),
+        type: "ai",
+        content: answer,
+        citations,
+        timestamp: data.chat?.timestamp ? new Date(data.chat.timestamp) : new Date(),
+      };
+      setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -145,6 +205,7 @@ export function useChat({ fileId }: UseChatProps) {
     messages,
     inputMessage,
     sendingMessage,
+    isLocked,
     setInputMessage,
     initializeChat,
     handleSendMessage,

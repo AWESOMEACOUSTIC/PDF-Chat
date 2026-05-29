@@ -5,6 +5,7 @@ import { PineconeStore } from "@langchain/pinecone";
 import pinecone from "../config/pinecone";
 import { embeddings } from "./embeddings";
 import { generateDocs } from "./documentLoader";
+import { filterTrustedChunks } from "./trustVaildator";
 import {
   DENSE_INDEX_NAME,
   SPARSE_INDEX_NAME,
@@ -54,8 +55,10 @@ export async function generateEmbeddingsInPineconeVectorStore(
     });
   }
 
-  const docs = await generateDocs(gridFsId, docId);
-  if (!docs.length) throw new Error("No chunks produced from PDF extraction.");
+  const rawDocs = await generateDocs(gridFsId, docId);
+  if (!rawDocs.length) throw new Error("No chunks produced from PDF extraction.");
+
+  const trustedDocs = await filterTrustedChunks(rawDocs);
 
   try {
     const test = await embeddings.embedQuery("ping");
@@ -64,7 +67,7 @@ export async function generateEmbeddingsInPineconeVectorStore(
     throw new Error(`Embeddings failed (likely quota): ${error?.message || error}`);
   }
 
-  await upsertHybridVectors(docs, docId, {
+  await upsertHybridVectors(trustedDocs, docId, {
     includeDense: !denseExists,
     includeSparse: sparseAvailable && !sparseExists,
   });

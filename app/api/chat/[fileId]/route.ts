@@ -9,6 +9,10 @@ import type { Citation } from "@/lib/langchain";
 
 export const runtime = "nodejs";
 
+const SECURITY_VIOLATION_CODE = "SECURITY_VIOLATION";
+const isSecurityViolationError = (error: unknown) =>
+  error instanceof Error && error.message.startsWith(SECURITY_VIOLATION_CODE);
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ fileId: string }> }
@@ -159,6 +163,18 @@ export async function POST(
 
     } catch (aiError) {
       console.error("AI processing error:", aiError);
+
+      if (isSecurityViolationError(aiError)) {
+        const message = aiError instanceof Error ? aiError.message : "Security violation";
+        return NextResponse.json(
+          {
+            success: false,
+            error: message,
+            code: SECURITY_VIOLATION_CODE,
+          },
+          { status: 403 }
+        );
+      }
       
       // Fallback response if AI processing fails
       const fallbackResponse = `I'm having trouble processing your question about "${document.fileName}" right now. This could be due to:

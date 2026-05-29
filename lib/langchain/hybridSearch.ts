@@ -11,6 +11,7 @@ import type {
 import pinecone from "../config/pinecone";
 import { embeddings } from "./embeddings";
 import { generateDocs } from "./documentLoader";
+import { filterTrustedChunks } from "./trustVaildator";
 import { reciprocalRankFusion, type RrfInputMatch } from "./reciprocalRankFusion";
 
 export const DENSE_INDEX_NAME = "pdf-chat";
@@ -193,10 +194,12 @@ export async function ensureHybridIndexes(gridFsId: string, docId: string) {
 
     if (denseExists && sparseExists) return;
 
-    const docs = await generateDocs(gridFsId, docId);
-    if (!docs.length) throw new Error("No chunks produced from PDF extraction.");
+    const rawDocs = await generateDocs(gridFsId, docId);
+    if (!rawDocs.length) throw new Error("No chunks produced from PDF extraction.");
 
-    await upsertHybridVectors(docs, docId, {
+    const trustedDocs = await filterTrustedChunks(rawDocs);
+
+    await upsertHybridVectors(trustedDocs, docId, {
         includeDense: !denseExists,
         includeSparse: !sparseExists,
     });

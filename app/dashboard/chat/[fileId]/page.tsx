@@ -24,6 +24,7 @@ export default function DocumentChatPage() {
     messages,
     inputMessage,
     sendingMessage,
+    isLocked,
     setInputMessage,
     initializeChat,
     handleSendMessage,
@@ -69,6 +70,7 @@ export default function DocumentChatPage() {
       <ChatInput
         inputMessage={inputMessage}
         sendingMessage={sendingMessage}
+        isLocked={isLocked}
         fileName={document.fileName}
         onInputChange={setInputMessage}
         onSendMessage={handleSendMessage}
